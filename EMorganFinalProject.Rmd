@@ -1,0 +1,411 @@
+---
+title: "finalproject"
+runtime: shiny
+output: html_document
+---
+
+
+This R Markdown document is made interactive using Shiny. Unlike the more traditional workflow of creating static reports, you can now create documents that allow your readers to change the assumptions underlying your analysis and see the results immediately. 
+
+To learn more, see [Interactive Documents](http://rmarkdown.rstudio.com/authoring_shiny.html).
+
+## Inputs and Outputs
+
+You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  This demonstrates how a standard R plot can be made interactive by wrapping it in the Shiny `renderPlot` function. The `selectInput` and `sliderInput` functions create the input widgets used to drive the plot.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("RSQLite")
+library("DESeq2")
+library("Biobase")
+library("ggplot2")
+library("plotly")
+library("shiny")
+library("dplyr")
+library("reshape2")
+#Create a connection to the SQLite database (change path if needed !)
+finalproj = dbConnect(dbDriver("SQLite"), dbname='/Users/emilyjennings/Documents/Grad_School_Work/Coursework/database_course/Homeworks/finalproject/finalproj.db')
+
+```
+
+
+
+
+
+Create table for deseq2
+
+```{r}
+dbExecute( finalproj, "CREATE TABLE  IF NOT EXISTS countstable AS
+SELECT NPF1.CDS, NPF1.NP1, NPF2.NP2, NPF3.NP3, PreL1.PL1, PreL2.PL2, PreL3.PL3,	EarL1.EL1,EarL2.EL2,EarL3.EL3,LateL1.LL1,	LateL2.LL2,LateL3.LL3,Male1.M1,Male2.M2,Male3.M3
+from NPF1
+	JOIN NPF2
+		ON NPF1.CDS=NPF2.CDS
+	JOIN NPF3
+		ON NPF1.CDS=NPF3.CDS
+	JOIN PreL1
+		ON NPF1.CDS=PreL1.CDS
+	JOIN PreL2
+		ON NPF1.CDS=PreL2.CDS
+	JOIN PreL3
+		ON NPF1.CDS=PreL3.CDS
+	JOIN EarL1
+		ON NPF1.CDS=EarL1.CDS
+	JOIN EarL2
+		ON NPF1.CDS=EarL2.CDS
+	JOIN EarL3
+		ON NPF1.CDS=EarL3.CDS
+	JOIN LateL1
+		ON NPF1.CDS=LateL1.CDS
+	JOIN LateL2
+		ON NPF1.CDS=LateL2.CDS
+	JOIN LateL3
+		ON NPF1.CDS=LateL3.CDS
+	JOIN Male1
+		ON NPF1.CDS=Male1.CDS
+	JOIN Male2
+		ON NPF1.CDS=Male2.CDS
+	JOIN Male3
+		ON NPF1.CDS=Male3.CDS")
+```
+
+import to matrix
+```{r}
+countframe=data.frame(dbReadTable(finalproj,"countstable"))
+countframe$NP1=as.integer(countframe$NP1)
+countframe$NP2=as.integer(countframe$NP2)
+countframe$NP3=as.integer(countframe$NP3)
+countframe$PL1=as.integer(countframe$PL1)
+countframe$PL2=as.integer(countframe$PL2)
+countframe$PL3=as.integer(countframe$PL3)
+countframe$EL1=as.integer(countframe$EL1)
+countframe$EL2=as.integer(countframe$EL2)
+countframe$EL3=as.integer(countframe$EL3)
+countframe$LL1=as.integer(countframe$LL1)
+countframe$LL2=as.integer(countframe$LL2)
+countframe$LL3=as.integer(countframe$LL3)
+countframe$M1=as.integer(countframe$M1)
+countframe$M2=as.integer(countframe$M2)
+countframe$M3=as.integer(countframe$M3)
+sampleframe=data.frame(dbReadTable(finalproj,"sampledat"))
+countmatrix=as.matrix(countframe[,-1])
+rownames(countmatrix)=countframe[,1]
+samplematrix=as.matrix(sampleframe[,-1])
+rownames(samplematrix)=sampleframe[,1]
+```
+
+check for formatting
+```{r}
+all(rownames(samplematrix) %in% colnames(countmatrix))
+all(rownames(samplematrix) == colnames(countmatrix))
+```
+
+import raw count matrix into a DESeq formatted object
+```{r}
+desdatset <- DESeqDataSetFromMatrix(countData = countmatrix,
+                              colData = samplematrix,
+                              design = ~Condition)
+
+```
+
+run DESeq analysis on the data generated above
+```{r}
+desdatset <- DESeq(desdatset)
+```
+
+
+Extract the results for each comparison into individual data frames
+```{r}
+NPvPLres=results(desdatset,contrast=c("Condition","NP","PL"))
+NotPvFirstT=data.frame(NPvPLres,row.names=NULL)
+NotPvFirstT$CDS=rownames(NPvPLres)
+NPvELres=results(desdatset,contrast=c("Condition","NP","EL"))
+NotPvSecondT=data.frame(NPvELres,row.names=NULL)
+NotPvSecondT$CDS=rownames(NPvELres)
+NPvLLres=results(desdatset,contrast=c("Condition","NP","LL"))
+NotPvThirdT=data.frame(NPvLLres,row.names=NULL)
+NotPvThirdT$CDS=rownames(NPvLLres)
+NPvMres=results(desdatset,contrast=c("Condition","NP","M"))
+NotPvMale=data.frame(NPvMres,row.names=NULL)
+NotPvMale$CDS=rownames(NPvMres)
+PLvELres=results(desdatset,contrast=c("Condition","PL","EL"))
+FirstTvsSecondT=data.frame(PLvELres,row.names=NULL)
+FirstTvsSecondT$CDS=rownames(PLvELres)
+PLvLLres=results(desdatset,contrast=c("Condition","PL","LL"))
+FirstTvsThirdT=data.frame(PLvLLres,row.names=NULL)
+FirstTvsThirdT$CDS=rownames(PLvLLres)
+PLvMres=results(desdatset,contrast=c("Condition","PL","M"))
+FirstTvsMale=data.frame(PLvMres,row.names=NULL)
+FirstTvsMale$CDS=rownames(PLvMres)
+ELvLLres=results(desdatset,contrast=c("Condition","EL","LL"))
+SecondTvsThirdT=data.frame(ELvLLres,row.names=NULL)
+SecondTvsThirdT$CDS=rownames(ELvLLres)
+ELvMres=results(desdatset,contrast=c("Condition","EL","M"))
+SecondTvsMale=data.frame(ELvMres,row.names=NULL)
+SecondTvsMale$CDS=rownames(ELvMres)
+LLvMres=results(desdatset,contrast=c("Condition","LL","M"))
+ThirdTvsMale=data.frame(LLvMres,row.names=NULL)
+ThirdTvsMale$CDS=rownames(LLvMres)
+
+
+```
+
+Add the statistics from the comparisons to the counts table for visualization
+```{r}
+countframe$NPvFT.padj=NotPvFirstT$padj
+countframe$NPvFT.FC=NotPvFirstT$log2FoldChange
+
+countframe$NPvST.padj=NotPvSecondT$padj
+countframe$NPvST.FC=NotPvSecondT$log2FoldChange
+
+countframe$NPvTT.padj=NotPvThirdT$padj
+countframe$NPvTT.FC=NotPvThirdT$log2FoldChange
+
+countframe$NPvM.padj=NotPvMale$padj
+countframe$NPvM.FC=NotPvMale$log2FoldChange
+
+countframe$FTvST.padj=FirstTvsSecondT$padj
+countframe$FTvST.FC=FirstTvsSecondT$log2FoldChange
+
+countframe$FTvTT.padj=FirstTvsThirdT$padj
+countframe$FTvTT.FC=FirstTvsThirdT$log2FoldChange
+
+countframe$FTvM.padj=FirstTvsMale$padj
+countframe$FTvM.FC=FirstTvsMale$log2FoldChange
+
+countframe$STvTT.padj=SecondTvsThirdT$padj
+countframe$STvTT.FC=SecondTvsThirdT$log2FoldChange
+
+countframe$STvM.padj=SecondTvsMale$padj
+countframe$STvM.FC=SecondTvsMale$log2FoldChange
+
+countframe$TTvM.padj=ThirdTvsMale$padj
+countframe$TTvM.FC=ThirdTvsMale$log2FoldChange
+```
+
+Add the DESeq2 results as tables to the database if needed for later
+```{r}
+dbWriteTable(finalproj,"NotPvFirstT",NotPvFirstT,overwrite=TRUE)
+dbWriteTable(finalproj,"NotPvSecondT",NotPvSecondT,overwrite=TRUE)
+dbWriteTable(finalproj,"NotPvThirdT",NotPvThirdT,overwrite=TRUE)
+dbWriteTable(finalproj,"NotPvMale",NotPvMale,overwrite=TRUE)
+dbWriteTable(finalproj,"FirstTvsSecondT",FirstTvsSecondT,overwrite=TRUE)
+dbWriteTable(finalproj,"FirstTvsThirdT",FirstTvsThirdT,overwrite=TRUE)
+dbWriteTable(finalproj,"FirstTvsMale",FirstTvsMale,overwrite=TRUE)
+dbWriteTable(finalproj,"SecondTvsThirdT",SecondTvsThirdT,overwrite=TRUE)
+dbWriteTable(finalproj,"SecondTvsMale",SecondTvsMale,overwrite=TRUE)
+dbWriteTable(finalproj,"ThirdTvsMale",ThirdTvsMale,overwrite=TRUE)
+```
+
+
+Create user interface for shiny app
+```{r eruptions, echo=FALSE}
+ui <- fluidPage(
+  titlePanel("Gene Expression During Reproduction in a Live Bearing Cockroach"),
+  sidebarLayout(
+    sidebarPanel(
+      img(src = "cockroach.png",height=120.3,width=254.65 ),
+      selectInput("comp", label = "Groups compared:",
+                  choices = c("Not Pregnant vs First Trimester"="NPvFT", "Not Pregnant vs Second Trimester"="NPvST", "Not Pregnant vs Third Trimester"="NPvTT", "Not Pregnant vs Male"="NPvM", "First Trimester vs Second Trimester"="FTvST","First Trimester vs Third Trimester"="FTvTT","First Trimester vs Male"="FTvM","SecondTrimester vs Third Trimester"="STvTT","Second Trimester vs Male"="STvM","Third Trimester vs Male"="TTvM"), selected = "Not Pregnant vs First Trimester"),
+      
+      sliderInput("pval", label = "Maximum P-value",
+                  min = 0, max = 1, value = .05, step = 0.001),
+      sliderInput("minfc",label="Minimum Log2 Fold Change from reference:", min=-1000,max=1000,value=1,step=5),
+      sliderInput("maxfc",label="Maximum Log2 Fold Change from reference:", min=-1000,max=1000,value=10,step=5)
+      
+    ),
+    # Show a plot of the generated distribution
+    mainPanel(
+    textOutput("filteredcount"), #print the number of genes that match the user specified criteria
+     plotlyOutput("plot") #printgraph
+      
+      
+    )
+    
+  )
+)
+
+
+```
+
+dynamic data stuff
+```{r}
+server <- function(input, output, session) {
+  raw<-countframe
+  output$plot=renderPlotly({ #creates heatmap object
+    #create filters based on user input. Each comparison has its own filter
+    
+    if(input$comp=="NPvFT") {
+      filt=quote(NPvFT.padj<input$pval & NPvFT.FC<=input$maxfc & NPvFT.FC>=input$minfc)
+    }
+    else if (input$comp=="NPvST"){
+      filt=quote(NPvST.padj<=input$pval & NPvST.FC<=input$maxfc & NPvST.FC>=input$minfc)
+    }
+    else if (input$comp=="NPvTT"){
+      filt=quote(NPvTT.padj<=input$pval & NPvTT.FC<=input$maxfc & NPvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="NPvM"){
+      filt=quote(NPvM.padj<=input$pval & NPvM.FC<=input$maxfc & NPvM.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvST"){
+      filt=quote(FTvST.padj<=input$pval & FTvST.FC<=input$maxfc & FTvST.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvTT"){
+      filt=quote(FTvTT.padj<=input$pval & FTvTT.FC<=input$maxfc & FTvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvM"){
+      filt=quote(FTvM.padj<=input$pval & FTvM.FC<=input$maxfc & FTvM.FC>=input$minfc)
+    }
+    else if (input$comp=="STvTT"){
+      filt=quote(STvTT.padj<=input$pval & STvTT.FC<=input$maxfc & STvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="STvM"){
+      filt=quote(STvM.padj<=input$pval & STvM.FC<=input$maxfc & STvM.FC>=input$minfc)
+    }
+    else {
+      filt=quote(TTvM.padj<=input$pval & TTvM.FC<=input$maxfc & TTvM.FC>=input$minfc)
+    }
+    
+    dropit=function(x)(x[,2:16]) #removes the pvalue and fold change columns so they are not included in plot
+    dropit1=function(x)(x[,1]) #removes the column containing the gene ID
+    collabs<-c("Not.Pregnant1","Not.Pregnant2","Not.Pregnant3",
+                                        "First.Trimester1","First.Trimester2","First.Trimester3",
+                                        "Second.Trimester1","Second.Trimester2","Second.Trimester3",
+                                        "Third.Trimester1","Third.Trimester2","Third.Trimester3",
+                                        "Male1","Male2","Male3") #new easier labels for the samples
+  
+    m <- list(
+      l = 110,
+      t=150
+    )  #margins for graph, left and top to give labels enough room
+  names1=as.list(dropit1(raw %>% filter_(filt))) #creating list of row names to use
+   t=as.matrix(dropit(raw %>% filter_(filt))) #filters the data based on the user chosen parameters, turns it into a matrix b/c easier to use in plotly
+   rownames(t)=names1 #adds row names to matrix
+   colnames(t)=collabs #changes the column names to our nice new ones
+   plot_ly(x=colnames(t),y=rownames(t),z=t,type="heatmap")%>% #creates base plot
+     layout(margin = m, #sets the margins to our specifications
+            xaxis=list(side="top",title="Sample"), #changes the x-axis to be above and labels it
+            autosize=F, #sets autosize to off b/c it never came out right/easy to see all contigs
+            width=750,#sets the plot width to a good size
+            height=3000) #makes the plot big enough to see all the contigs when there is a huge amount
+      
+    
+  })
+  
+  
+  rowcnt=reactive({ #counts how many rows (genes) are in the filtered dataset
+    if(input$comp=="NPvFT") {
+      filt=quote(NPvFT.padj<input$pval & NPvFT.FC<=input$maxfc & NPvFT.FC>=input$minfc)
+      
+    }
+    else if (input$comp=="NPvST"){
+      filt=quote(NPvST.padj<=input$pval & NPvST.FC<=input$maxfc & NPvST.FC>=input$minfc)
+    }
+    else if (input$comp=="NPvTT"){
+      filt=quote(NPvTT.padj<=input$pval & NPvTT.FC<=input$maxfc & NPvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="NPvM"){
+      filt=quote(NPvM.padj<=input$pval & NPvM.FC<=input$maxfc & NPvM.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvST"){
+      filt=quote(FTvST.padj<=input$pval & FTvST.FC<=input$maxfc & FTvST.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvTT"){
+      filt=quote(FTvTT.padj<=input$pval & FTvTT.FC<=input$maxfc & FTvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvM"){
+      filt=quote(FTvM.padj<=input$pval & FTvM.FC<=input$maxfc & FTvM.FC>=input$minfc)
+    }
+    else if (input$comp=="STvTT"){
+      filt=quote(STvTT.padj<=input$pval & STvTT.FC<=input$maxfc & STvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="STvM"){
+      filt=quote(STvM.padj<=input$pval & STvM.FC<=input$maxfc & STvM.FC>=input$minfc)
+    }
+    else {
+      filt=quote(TTvM.padj<=input$pval & TTvM.FC<=input$maxfc & TTvM.FC>=input$minfc)
+    }
+    
+    dropit=function(x)(x[,2:16])
+    addnames=function(x)(colnames(x)<-c("Not.Pregnant1","Not.Pregnant2","Not.Pregnant3",
+                                        "First.Trimester1","First.Trimester2","First.Trimester3",
+                                        "Second.Trimester1","Second.Trimester2","Second.Trimester3",
+                                        "Third.Trimester1","Third.Trimester2","Third.Trimester3",
+                                        "Male1","Male2","Male3"))
+    nrow(dropit(raw %>%
+                  filter_(filt)))
+    
+    
+  })
+  
+output$filteredcount=renderText(paste(rowcnt(), "genes match your criteria")) #makes output object that reports how many genes are in the filtered set
+  
+  contignames=reactive({ #originally had this for something else didn't use leaving it for future in case
+    if(input$comp=="NPvFT") {
+      filt=quote(NPvFT.padj<input$pval & NPvFT.FC<=input$maxfc & NPvFT.FC>=input$minfc)
+      
+    }
+    else if (input$comp=="NPvST"){
+      filt=quote(NPvST.padj<=input$pval & NPvST.FC<=input$maxfc & NPvST.FC>=input$minfc)
+    }
+    else if (input$comp=="NPvTT"){
+      filt=quote(NPvTT.padj<=input$pval & NPvTT.FC<=input$maxfc & NPvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="NPvM"){
+      filt=quote(NPvM.padj<=input$pval & NPvM.FC<=input$maxfc & NPvM.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvST"){
+      filt=quote(FTvST.padj<=input$pval & FTvST.FC<=input$maxfc & FTvST.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvTT"){
+      filt=quote(FTvTT.padj<=input$pval & FTvTT.FC<=input$maxfc & FTvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="FTvM"){
+      filt=quote(FTvM.padj<=input$pval & FTvM.FC<=input$maxfc & FTvM.FC>=input$minfc)
+    }
+    else if (input$comp=="STvTT"){
+      filt=quote(STvTT.padj<=input$pval & STvTT.FC<=input$maxfc & STvTT.FC>=input$minfc)
+    }
+    else if (input$comp=="STvM"){
+      filt=quote(STvM.padj<=input$pval & STvM.FC<=input$maxfc & STvM.FC>=input$minfc)
+    }
+    else {
+      filt=quote(TTvM.padj<=input$pval & TTvM.FC<=input$maxfc & TTvM.FC>=input$minfc)
+    }
+    
+    dropit1=function(x)(x[,1])
+    addnames=function(x)(colnames(x)<-c("Not.Pregnant1","Not.Pregnant2","Not.Pregnant3",
+                                        "First.Trimester1","First.Trimester2","First.Trimester3",
+                                        "Second.Trimester1","Second.Trimester2","Second.Trimester3",
+                                        "Third.Trimester1","Third.Trimester2","Third.Trimester3",
+                                        "Male1","Male2","Male3"))
+    dropit1(raw %>%
+                  filter_(filt))
+    
+    
+  })
+  
+
+
+  
+  
+}
+```
+
+
+## Embedded Application
+
+It's also possible to embed an entire Shiny application within an R Markdown document using the `shinyAppDir` function. This example embeds a Shiny application located in another directory:
+
+```{r tabsets, echo=FALSE}
+shinyApp(ui = ui, server = server)
+
+
+```
+
+Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy.
+
+You can also use the `shinyApp` function to define an application inline rather then in an external directory.
+
+In all of R code chunks above the `echo = FALSE` attribute is used. This is to prevent the R code within the chunk from rendering in the document alongside the Shiny components.
+
+
+
