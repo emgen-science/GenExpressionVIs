@@ -1,2 +1,2 @@
 # GenExpressionVIs
-Final Project for Intro to DB Management systems
+Data vis from RNAseq data in SQLite DB work in progress
